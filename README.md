@@ -32,6 +32,15 @@ If the volume creation doesn't work, and the device is not mounted in the instan
 ```
 ./create-masternode.sh
 ```
+once the server is up, go to the web interface `http://SERVER_IP:8080`.
+
+Go to the Add host screen.
+
+Go to the Custom provider.
+
+Copy the URL containing the token. You'll need it for the next step.
+
+ex: `http://192.168.11.3:8080/v3/scripts/6923123564E05B347880:1483112300000:zl1bcertyrk0cNtyHqmn5bmE`
 
 ### configure the rancher nodes
 for this step, you need to edit the `user-data-nodes.sh` file.
@@ -41,3 +50,12 @@ The IP address of the server should also be set in this file in the variable `RA
 ```
 ./create-instances.sh
 ```
+
+### tag a node for load balancer role
+We want to make sure the ingress traffic to the kubernetes cluster goes through specific nodes. We gonna add a label to a node in Rancher. That label will be used as a selector when creating Ingress/Load Balancer.
+
+`TODO`
+
+### add a floating IP to the ingress node
+
+`TODO`
