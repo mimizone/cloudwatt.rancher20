@@ -1,25 +1,37 @@
 #!/bin/bash
 
+source "../conf.sh"
+
+VPN_PRIVATE_IP=${RANCHER_VPN_PRIVATE_IP}
 IMAGE="Ubuntu 12.04"
 FLAVOR="t1.cw.tiny"
-NET_ID="900189f9-09ec-4cc2-8738-9108be704736"
-KEYPAIR="bigk8s"
-SEC_GROUP_RANCHER_NODES="rancher-nodes"
-VPN_PRIVATE_IP="192.168.11.254"
-GATEWAY="192.168.11.1"
-SUBNET_NAME="bitpusher-subnet"
+NET_ID=`openstack network show ${RANCHER_NET_NAME} -f json | jq -r ' map(select(.Field=="id")) | .[].Value' `
+KEYPAIR=${RANCHER_KEYPAIR}
+SUBNET_NAME=${RANCHER_SUBNET_NAME}
+GATEWAY=${RANCHER_GATEWAY}
+SECGROUP_MEMBERS_NAME="vpn-members"
+SECGROUP_NAME="vpn"
 
 echo "Creating security groups"
 echo "------------------------"
-SECGROUP=`openstack security group create -f json vpn | jq -r ' map(select(.Field=="id")) | .[].Value' `
-SECGROUP_RANCHER=`openstack security group show -f json ${SEC_GROUP_RANCHER_NODES} | jq -r ' map(select(.Field=="id")) | .[].Value' `
-openstack security group rule create --ingress --remote-ip 0.0.0.0/0 --dst-port 22 --protocol tcp ${SECGROUP}
-openstack security group rule create --ingress --remote-ip 0.0.0.0/0 --dst-port 1194 --protocol udp ${SECGROUP}
-openstack security group rule create --egress --remote-group ${SECGROUP_RANCHER} --protocol udp ${SECGROUP}
-openstack security group rule create --egress --remote-group ${SECGROUP_RANCHER} --protocol tcp ${SECGROUP}
-openstack security group rule create --ingress --remote-group ${SECGROUP_RANCHER} --protocol udp ${SECGROUP}
-openstack security group rule create --ingress --remote-group ${SECGROUP_RANCHER} --protocol tcp ${SECGROUP}
+#vpn members
+VPN_SECGROUP_NODES=`openstack security group show ${SECGROUP_MEMBERS_NAME} -f json | jq -r ' map(select(.Field=="id")) | .[].Value' `
+if [ -z ${VPN_SECGROUP_NODES} ];
+then
+  echo "creating security group ${SECGROUP_MEMBERS_NAME}"
+  VPN_SECGROUP_NODES=`openstack security group create -f json ${SECGROUP_MEMBERS_NAME} | jq -r ' map(select(.Field=="id")) | .[].Value' `
+fi
+#vpn
+echo "creating security group ${SECGROUP_NAME}"
+VPN_SECGROUP=`openstack security group create -f json ${SECGROUP_NAME} | jq -r ' map(select(.Field=="id")) | .[].Value' `
+openstack security group rule create --ingress --remote-ip 0.0.0.0/0 --dst-port 22 --protocol tcp ${VPN_SECGROUP}
+openstack security group rule create --ingress --remote-ip 0.0.0.0/0 --dst-port 1194 --protocol udp ${VPN_SECGROUP}
+openstack security group rule create --egress --remote-group ${VPN_SECGROUP_NODES} --protocol udp ${VPN_SECGROUP}
+openstack security group rule create --egress --remote-group ${VPN_SECGROUP_NODES} --protocol tcp ${VPN_SECGROUP}
+openstack security group rule create --ingress --remote-group ${VPN_SECGROUP_NODES} --protocol udp ${VPN_SECGROUP}
+openstack security group rule create --ingress --remote-group ${VPN_SECGROUP_NODES} --protocol tcp ${VPN_SECGROUP}
 # TODO remove default egress all and limit to VPN remote endpoint
+
 
 
 echo "Adding static routes in the subnet ${SUBNET_NAME}"
@@ -34,7 +46,7 @@ echo "Creating vpn instance"
 echo "------------------------"
 openstack server create \
 --key-name "${KEYPAIR}" \
---security-group vpn \
+--security-group ${SECGROUP_NAME} \
 --flavor "${FLAVOR}" \
 --image "${IMAGE}" \
 --nic net-id=${NET_ID},v4-fixed-ip=${VPN_PRIVATE_IP} \
